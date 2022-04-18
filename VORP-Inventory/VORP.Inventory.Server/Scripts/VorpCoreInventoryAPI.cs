@@ -1,6 +1,4 @@
-﻿using CitizenFX.Core;
-using CitizenFX.Core.Native;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Dynamic;
@@ -8,8 +6,8 @@ using System.Text;
 using System.Threading.Tasks;
 using VORP.Inventory.Server.Database;
 using VORP.Inventory.Server.Extensions;
-using VORP.Inventory.Server.Models;
 using VORP.Inventory.Shared;
+using VORP.Inventory.Shared.Models;
 
 namespace VORP.Inventory.Server.Scripts
 {
@@ -58,13 +56,13 @@ namespace VORP.Inventory.Server.Scripts
 
                 if (coreCharacterId == -1) return false; // no characterId provided
 
-                Dictionary<string, ItemClass> itemClasses = ItemDatabase.GetInventory(steamIdendifier);
+                Dictionary<string, Item> itemClasses = ItemDatabase.GetInventory(steamIdendifier);
 
                 if (itemClasses is not null)
                 {
-                    foreach (KeyValuePair<string, ItemClass> item in itemClasses)
+                    foreach (KeyValuePair<string, Item> item in itemClasses)
                     {
-                        items.Add(item.Key, item.Value.getCount());
+                        items.Add(item.Key, item.Value.Count);
                     }
                 }
 
@@ -118,7 +116,7 @@ namespace VORP.Inventory.Server.Scripts
                 if (coreUserCharacter == null) return false;
 
                 int charIdentifier = coreUserCharacter.charIdentifier;
-                int totalcount = getUserTotalCountWeapons(identifier, charIdentifier) + quantity;
+                int totalcount = GetUserTotalCountWeapons(identifier, charIdentifier) + quantity;
                 if (Configuration.INVENTORY_MAX_WEAPONS != -1)
                 {
                     if (totalcount <= Configuration.INVENTORY_MAX_WEAPONS)
@@ -199,15 +197,15 @@ namespace VORP.Inventory.Server.Scripts
 
                 string identifier = "steam:" + player.Identifiers["steam"];
 
-                Items item = ItemDatabase.GetItem(itemName);
+                Item item = ItemDatabase.GetItem(itemName);
                 if (item == null)
                 {
                     Logger.Error($"canCarryItem: Item '{itemName}' does not exist.");
                     cb.Invoke(false);
                 }
 
-                int maxLimitItem = item.getLimit();
-                Dictionary<string, ItemClass> userInventory = ItemDatabase.GetInventory(identifier);
+                int maxLimitItem = item.Limit;
+                Dictionary<string, Item> userInventory = ItemDatabase.GetInventory(identifier);
 
                 int maxLimitConfig = Configuration.INVENTORY_MAX_ITEMS;
                 int newTotalAmountOfCurrentItems = GetTotalAmountOfItems(identifier) + amountToCarry;
@@ -231,8 +229,8 @@ namespace VORP.Inventory.Server.Scripts
                 }
 
                 // If the user has the item, we still check to see how many
-                ItemClass userItem = userInventory[itemName];
-                int itemQuantity = userItem.getCount();
+                Item userItem = userInventory[itemName];
+                int itemQuantity = userItem.Count;
 
                 amountToCarry = itemQuantity + amountToCarry;
                 result = CheckIfUserCanHaveItem(amountToCarry, maxLimitItem, maxLimitConfig, newTotalAmountOfCurrentItems);
@@ -282,7 +280,7 @@ namespace VORP.Inventory.Server.Scripts
                 string identifier = "steam:" + player.Identifiers["steam"];
                 if (ItemDatabase.UserInventory.ContainsKey(identifier))
                 {
-                    Dictionary<string, ItemClass> itemsDBO = ItemDatabase.UserInventory[identifier];
+                    Dictionary<string, Item> itemsDBO = ItemDatabase.UserInventory[identifier];
 
                     if (itemsDBO == null)
                     {
@@ -292,19 +290,19 @@ namespace VORP.Inventory.Server.Scripts
                             cb.Invoke(useritems);
                     }
 
-                    foreach (KeyValuePair<string, ItemClass> items in itemsDBO)
+                    foreach (KeyValuePair<string, Item> items in itemsDBO)
                     {
-                        ItemClass itemClass = items.Value;
+                        Item itemClass = items.Value;
                         if (itemClass == null) continue;
 
                         Dictionary<string, object> item = new Dictionary<string, object>()
                         {
-                            {"label", itemClass.getLabel()},
-                            {"name", itemClass.getName()},
-                            {"type", itemClass.getType()},
-                            {"count", itemClass.getCount()},
-                            {"limit", itemClass.getLimit()},
-                            {"usable", itemClass.getUsable()}
+                            {"label", itemClass.Label},
+                            {"name", itemClass.Name},
+                            {"type", itemClass.Type},
+                            {"count", itemClass.Count},
+                            {"limit", itemClass.Limit},
+                            {"usable", itemClass.Usable}
                         };
 
                         useritems.Add(item);
@@ -337,7 +335,7 @@ namespace VORP.Inventory.Server.Scripts
                     return;
                 }
 
-                Items item = ItemDatabase.GetItem(itemName);
+                Item item = ItemDatabase.GetItem(itemName);
                 if (item == null)
                 {
                     Logger.Error($"Item '{itemName}' not found in Server Items.");
@@ -347,7 +345,7 @@ namespace VORP.Inventory.Server.Scripts
                 Dictionary<string, object> argumentos = new()
                 {
                     { "source", int.Parse(source.Handle) },
-                    { "item", ItemDatabase.ServerItems[itemName].getItemDictionary() },
+                    { "item", ItemDatabase.ServerItems[itemName].GetItemDictionary() },
                     { "args", args }
                 };
                 usableItemsFunctions[itemName](argumentos);
@@ -380,12 +378,12 @@ namespace VORP.Inventory.Server.Scripts
 
                 if (ItemDatabase.UserWeapons.ContainsKey(weaponId))
                 {
-                    if (ItemDatabase.UserWeapons[weaponId].getPropietary() == identifier)
+                    if (ItemDatabase.UserWeapons[weaponId].Propietary == identifier)
                     {
-                        ItemDatabase.UserWeapons[weaponId].quitComponent(component);
+                        ItemDatabase.UserWeapons[weaponId].QuitComponent(component);
                         Exports["ghmattimysql"]
                             .execute(
-                                $"UPDATE loadout SET components = '{Newtonsoft.Json.JsonConvert.SerializeObject(ItemDatabase.UserWeapons[weaponId].getAllComponents())}' WHERE id=?",
+                                $"UPDATE loadout SET components = '{JsonConvert.SerializeObject(ItemDatabase.UserWeapons[weaponId].Components)}' WHERE id=?",
                                 new[] { weaponId });
                         function.Invoke(true);
                         p.TriggerEvent("vorpCoreClient:subComponent", weaponId, component);
@@ -418,13 +416,13 @@ namespace VORP.Inventory.Server.Scripts
 
                 if (ItemDatabase.UserWeapons.ContainsKey(weaponId))
                 {
-                    if (ItemDatabase.UserWeapons[weaponId].getPropietary() == identifier)
+                    if (ItemDatabase.UserWeapons[weaponId].Propietary == identifier)
                     {
-                        ItemDatabase.UserWeapons[weaponId].setComponent(component);
+                        ItemDatabase.UserWeapons[weaponId].Components.Add(component);
 
                         Exports["ghmattimysql"]
                             .execute(
-                                $"UPDATE loadout SET components = '{Newtonsoft.Json.JsonConvert.SerializeObject(ItemDatabase.UserWeapons[weaponId].getAllComponents())}' WHERE id=?",
+                                $"UPDATE loadout SET components = '{Newtonsoft.Json.JsonConvert.SerializeObject(ItemDatabase.UserWeapons[weaponId].Components)}' WHERE id=?",
                                 new[] { weaponId });
                         function.Invoke(true);
                         p.TriggerEvent("vorpCoreClient:addComponent", weaponId, component);
@@ -457,19 +455,20 @@ namespace VORP.Inventory.Server.Scripts
 
                 Dictionary<string, dynamic> weapons = new Dictionary<string, dynamic>();
                 bool found = false;
-                foreach (KeyValuePair<int, WeaponClass> weapon in ItemDatabase.UserWeapons)
+                foreach (KeyValuePair<int, Weapon> weapon in ItemDatabase.UserWeapons)
                 {
-                    if (weapon.Value.getId() == weapId && !found)
+                    if (weapon.Value.Id == weapId && !found)
                     {
-                        weapons.Add("name", weapon.Value.getName());
-                        weapons.Add("id", weapon.Value.getId());
-                        weapons.Add("propietary", weapon.Value.getPropietary());
-                        weapons.Add("used", weapon.Value.getUsed());
-                        weapons.Add("ammo", weapon.Value.getAllAmmo());
-                        weapons.Add("components", weapon.Value.getAllComponents());
+                        weapons.Add("name", weapon.Value.Name);
+                        weapons.Add("id", weapon.Value.Id);
+                        weapons.Add("propietary", weapon.Value.Propietary);
+                        weapons.Add("used", weapon.Value.Used);
+                        weapons.Add("ammo", weapon.Value.Ammo);
+                        weapons.Add("components", weapon.Value.Components);
                         found = true;
                     }
                 }
+
                 function.Invoke(weapons);
             }
             catch (Exception ex)
@@ -505,26 +504,28 @@ namespace VORP.Inventory.Server.Scripts
                 Dictionary<string, dynamic> weapons;
                 List<Dictionary<string, dynamic>> userWeapons = new List<Dictionary<string, dynamic>>();
 
-                foreach (KeyValuePair<int, WeaponClass> weapon in ItemDatabase.UserWeapons)
+                foreach (KeyValuePair<int, Weapon> weapon in ItemDatabase.UserWeapons)
                 {
-                    if (weapon.Value.getPropietary() == identifier)
+                    if (weapon.Value.Propietary == identifier)
                     {
 
-                        if (weapon.Value.getCharId() == charIdentifier)
+                        if (weapon.Value.CharId == charIdentifier)
                         {
                             weapons = new Dictionary<string, dynamic>
                             {
-                                ["name"] = weapon.Value.getName(),
-                                ["id"] = weapon.Value.getId(),
-                                ["propietary"] = weapon.Value.getPropietary(),
-                                ["used"] = weapon.Value.getUsed(),
-                                ["ammo"] = weapon.Value.getAllAmmo(),
-                                ["components"] = weapon.Value.getAllComponents()
+                                ["name"] = weapon.Value.Name,
+                                ["id"] = weapon.Value.Id,
+                                ["propietary"] = weapon.Value.Propietary,
+                                ["used"] = weapon.Value.Used,
+                                ["ammo"] = weapon.Value.Ammo,
+                                ["components"] = weapon.Value.Components
                             };
+
                             userWeapons.Add(weapons);
                         }
                     }
                 }
+
                 function.Invoke(userWeapons);
             }
             catch (Exception ex)
@@ -549,9 +550,9 @@ namespace VORP.Inventory.Server.Scripts
 
                 if (ItemDatabase.UserWeapons.ContainsKey(weaponId))
                 {
-                    if (ItemDatabase.UserWeapons[weaponId].getPropietary() == identifier)
+                    if (ItemDatabase.UserWeapons[weaponId].Propietary == identifier)
                     {
-                        function.Invoke(ItemDatabase.UserWeapons[weaponId].getAllAmmo());
+                        function.Invoke(ItemDatabase.UserWeapons[weaponId].Ammo);
                     }
                 }
             }
@@ -577,9 +578,9 @@ namespace VORP.Inventory.Server.Scripts
 
                 if (ItemDatabase.UserWeapons.ContainsKey(weaponId))
                 {
-                    if (ItemDatabase.UserWeapons[weaponId].getPropietary() == identifier)
+                    if (ItemDatabase.UserWeapons[weaponId].Propietary == identifier)
                     {
-                        function.Invoke(ItemDatabase.UserWeapons[weaponId].getAllComponents());
+                        function.Invoke(ItemDatabase.UserWeapons[weaponId].Components);
                     }
                 }
             }
@@ -605,9 +606,9 @@ namespace VORP.Inventory.Server.Scripts
 
                 if (ItemDatabase.UserWeapons.ContainsKey(weaponId))
                 {
-                    if (ItemDatabase.UserWeapons[weaponId].getPropietary() == identifier)
+                    if (ItemDatabase.UserWeapons[weaponId].Propietary == identifier)
                     {
-                        ItemDatabase.UserWeapons[weaponId].addAmmo(cuantity, bulletType);
+                        ItemDatabase.UserWeapons[weaponId].AddAmmo(cuantity, bulletType);
                         p.TriggerEvent("vorpCoreClient:addBullets", weaponId, bulletType, cuantity);
                     }
                 }
@@ -638,9 +639,9 @@ namespace VORP.Inventory.Server.Scripts
 
                 if (ItemDatabase.UserWeapons.ContainsKey(weaponId))
                 {
-                    if (ItemDatabase.UserWeapons[weaponId].getPropietary() == identifier)
+                    if (ItemDatabase.UserWeapons[weaponId].Propietary == identifier)
                     {
-                        ItemDatabase.UserWeapons[weaponId].subAmmo(cuantity, bulletType);
+                        ItemDatabase.UserWeapons[weaponId].SubAmmo(cuantity, bulletType);
                         p.TriggerEvent("vorpCoreClient:subBullets", weaponId, bulletType, cuantity);
                     }
                 }
@@ -671,7 +672,7 @@ namespace VORP.Inventory.Server.Scripts
 
                 if (ItemDatabase.UserInventory.ContainsKey(identifier))
                 {
-                    Dictionary<string, ItemClass> inventory = ItemDatabase.GetInventory(identifier);
+                    Dictionary<string, Item> inventory = ItemDatabase.GetInventory(identifier);
 
                     if (inventory == null)
                     {
@@ -681,8 +682,8 @@ namespace VORP.Inventory.Server.Scripts
 
                     if (inventory.ContainsKey(item))
                     {
-                        ItemClass itemClass = inventory[item];
-                        funcion.Invoke(itemClass.getCount());
+                        Item itemClass = inventory[item];
+                        funcion.Invoke(itemClass.Count);
                     }
                     else
                     {
@@ -720,7 +721,7 @@ namespace VORP.Inventory.Server.Scripts
 
                 if (!ItemDatabase.UserInventory.ContainsKey(identifier))
                 {
-                    Dictionary<string, ItemClass> userinv = new Dictionary<string, ItemClass>();
+                    Dictionary<string, Item> userinv = new Dictionary<string, Item>();
                     ItemDatabase.UserInventory.Add(identifier, userinv);
                 }
 
@@ -728,7 +729,7 @@ namespace VORP.Inventory.Server.Scripts
                 {
                     if (ItemDatabase.UserInventory[identifier].ContainsKey(name))
                     {
-                        if (ItemDatabase.UserInventory[identifier][name].getCount() + quantity <= ItemDatabase.UserInventory[identifier][name].getLimit())
+                        if (ItemDatabase.UserInventory[identifier][name].Count + quantity <= ItemDatabase.UserInventory[identifier][name].Limit)
                         {
                             if (quantity > 0)
                             {
@@ -739,17 +740,17 @@ namespace VORP.Inventory.Server.Scripts
                                     if (totalcount <= Configuration.INVENTORY_MAX_ITEMS)
                                     {
                                         added = true;
-                                        ItemDatabase.UserInventory[identifier][name].addCount(quantity);
+                                        ItemDatabase.UserInventory[identifier][name].AddCount(quantity);
                                     }
                                 }
                                 else
                                 {
                                     added = true;
-                                    ItemDatabase.UserInventory[identifier][name].addCount(quantity);
+                                    ItemDatabase.UserInventory[identifier][name].AddCount(quantity);
                                 }
                             }
                         }
-                        else if (ItemDatabase.UserInventory[identifier][name].getLimit() == -1)
+                        else if (ItemDatabase.UserInventory[identifier][name].Limit == -1)
                         {
                             if (quantity > 0)
                             {
@@ -760,20 +761,20 @@ namespace VORP.Inventory.Server.Scripts
                                     if (totalcount <= Configuration.INVENTORY_MAX_ITEMS)
                                     {
                                         added = true;
-                                        ItemDatabase.UserInventory[identifier][name].addCount(quantity);
+                                        ItemDatabase.UserInventory[identifier][name].AddCount(quantity);
                                     }
                                 }
                                 else
                                 {
                                     added = true;
-                                    ItemDatabase.UserInventory[identifier][name].addCount(quantity);
+                                    ItemDatabase.UserInventory[identifier][name].AddCount(quantity);
                                 }
                             }
                         }
                     }
                     else
                     {
-                        if (quantity <= ItemDatabase.ServerItems[name].getLimit())
+                        if (quantity <= ItemDatabase.ServerItems[name].Limit)
                         {
                             added = true;
 
@@ -784,20 +785,36 @@ namespace VORP.Inventory.Server.Scripts
                                 if (totalcount <= Configuration.INVENTORY_MAX_ITEMS)
                                 {
                                     added = true;
-                                    ItemDatabase.UserInventory[identifier].Add(name, new ItemClass(quantity, ItemDatabase.ServerItems[name].getLimit(),
-                                ItemDatabase.ServerItems[name].getLabel(), name, ItemDatabase.ServerItems[name].getType(), true, ItemDatabase.ServerItems[name].getCanRemove()));
+                                    ItemDatabase.UserInventory[identifier].Add(name, new Item
+                                    {
+                                        Count = quantity,
+                                        Limit = ItemDatabase.ServerItems[name].Limit,
+                                        Label = ItemDatabase.ServerItems[name].Label,
+                                        Name = name,
+                                        Type = ItemDatabase.ServerItems[name].Type,
+                                        Usable = true,
+                                        CanRemove = ItemDatabase.ServerItems[name].CanRemove
+                                    });
                                 }
                             }
                             else
                             {
                                 added = true;
-                                ItemDatabase.UserInventory[identifier].Add(name, new ItemClass(quantity, ItemDatabase.ServerItems[name].getLimit(),
-                                ItemDatabase.ServerItems[name].getLabel(), name, ItemDatabase.ServerItems[name].getType(), true, ItemDatabase.ServerItems[name].getCanRemove()));
+                                ItemDatabase.UserInventory[identifier].Add(name, new Item
+                                {
+                                    Count = quantity,
+                                    Limit = ItemDatabase.ServerItems[name].Limit,
+                                    Label = ItemDatabase.ServerItems[name].Label,
+                                    Name = name,
+                                    Type = ItemDatabase.ServerItems[name].Type,
+                                    Usable = true,
+                                    CanRemove = ItemDatabase.ServerItems[name].CanRemove
+                                });
                             }
 
 
                         }
-                        else if (ItemDatabase.ServerItems[name].getLimit() == -1)
+                        else if (ItemDatabase.ServerItems[name].Limit == -1)
                         {
                             if (Configuration.INVENTORY_MAX_ITEMS != 0)
                             {
@@ -806,27 +823,42 @@ namespace VORP.Inventory.Server.Scripts
                                 if (totalcount <= Configuration.INVENTORY_MAX_ITEMS)
                                 {
                                     added = true;
-                                    ItemDatabase.UserInventory[identifier].Add(name, new ItemClass(quantity, ItemDatabase.ServerItems[name].getLimit(),
-                                        ItemDatabase.ServerItems[name].getLabel(), name, ItemDatabase.ServerItems[name].getType(), true, ItemDatabase.ServerItems[name].getCanRemove()));
+                                    ItemDatabase.UserInventory[identifier].Add(name, new Item
+                                    {
+                                        Count = quantity,
+                                        Limit = ItemDatabase.ServerItems[name].Limit,
+                                        Label = ItemDatabase.ServerItems[name].Label,
+                                        Name = name,
+                                        Type = ItemDatabase.ServerItems[name].Type,
+                                        Usable = true,
+                                        CanRemove = ItemDatabase.ServerItems[name].CanRemove
+                                    });
                                 }
                             }
                             else
                             {
                                 added = true;
-                                ItemDatabase.UserInventory[identifier].Add(name, new ItemClass(quantity, ItemDatabase.ServerItems[name].getLimit(),
-                                    ItemDatabase.ServerItems[name].getLabel(), name, ItemDatabase.ServerItems[name].getType(), true, ItemDatabase.ServerItems[name].getCanRemove()));
+                                ItemDatabase.UserInventory[identifier].Add(name, new Item
+                                {
+                                    Count = quantity,
+                                    Limit = ItemDatabase.ServerItems[name].Limit,
+                                    Label = ItemDatabase.ServerItems[name].Label,
+                                    Name = name,
+                                    Type = ItemDatabase.ServerItems[name].Type,
+                                    Usable = true,
+                                    CanRemove = ItemDatabase.ServerItems[name].CanRemove
+                                });
                             }
-
                         }
-
                     }
+
                     if (ItemDatabase.UserInventory[identifier].ContainsKey(name) && added)
                     {
-                        int limit = ItemDatabase.UserInventory[identifier][name].getLimit();
-                        string label = ItemDatabase.UserInventory[identifier][name].getLabel();
-                        string type = ItemDatabase.UserInventory[identifier][name].getType();
-                        bool usable = ItemDatabase.UserInventory[identifier][name].getUsable();
-                        bool canRemove = ItemDatabase.UserInventory[identifier][name].getCanRemove();
+                        int limit = ItemDatabase.UserInventory[identifier][name].Limit;
+                        string label = ItemDatabase.UserInventory[identifier][name].Label;
+                        string type = ItemDatabase.UserInventory[identifier][name].Type;
+                        bool usable = ItemDatabase.UserInventory[identifier][name].Usable;
+                        bool canRemove = ItemDatabase.UserInventory[identifier][name].CanRemove;
                         player.TriggerEvent("vorpCoreClient:addItem", quantity, limit, label, name, type, usable, canRemove);//Pass item to client
                         bool result = await SaveInventoryItemsSupportAsync(identifier, coreUserCharacterId);
                         if (!result)
@@ -874,7 +906,7 @@ namespace VORP.Inventory.Server.Scripts
                 string identifier = "steam:" + player.Identifiers["steam"];
                 int coreUserCharacterId = await player.GetCoreUserCharacterIdAsync();
 
-                Dictionary<string, ItemClass> userInventory = ItemDatabase.GetInventory(identifier);
+                Dictionary<string, Item> userInventory = ItemDatabase.GetInventory(identifier);
                 if (userInventory == null)
                 {
                     Logger.Error($"subItem: Player '{source}' inventory does not exist.");
@@ -883,8 +915,8 @@ namespace VORP.Inventory.Server.Scripts
 
                 if (userInventory.ContainsKey(itemName))
                 {
-                    ItemClass item = userInventory[itemName];
-                    int itemCount = item.getCount();
+                    Item item = userInventory[itemName];
+                    int itemCount = item.Count;
 
                     if (quantity <= itemCount)
                     {
@@ -959,7 +991,7 @@ namespace VORP.Inventory.Server.Scripts
                     identifier = "steam:" + targetPlayer.Identifiers["steam"];
                     if (Configuration.INVENTORY_MAX_WEAPONS != 0)
                     {
-                        int totalcount = getUserTotalCountWeapons(identifier, charIdentifier);
+                        int totalcount = GetUserTotalCountWeapons(identifier, charIdentifier);
                         totalcount += 1;
                         if (totalcount > Configuration.INVENTORY_MAX_WEAPONS)
                         {
@@ -991,16 +1023,27 @@ namespace VORP.Inventory.Server.Scripts
                     }
                 }
 
-                Exports["ghmattimysql"].execute("INSERT INTO loadout (`identifier`,`charidentifier`,`name`,`ammo`,`components`) VALUES (?,?,?,?,?)", new object[] { identifier, charIdentifier, hashName, Newtonsoft.Json.JsonConvert.SerializeObject(ammoaux), Newtonsoft.Json.JsonConvert.SerializeObject(auxcomponents) }, new Action<dynamic>((result) =>
+                Exports["ghmattimysql"].execute("INSERT INTO loadout (`identifier`,`charidentifier`,`name`,`ammo`,`components`) VALUES (?,?,?,?,?)", new object[] { identifier, charIdentifier, hashName, JsonConvert.SerializeObject(ammoaux), JsonConvert.SerializeObject(auxcomponents) }, new Action<dynamic>((result) =>
                 {
                     int weaponId = result.insertId;
-                    WeaponClass auxWeapon = new WeaponClass(weaponId, identifier, hashName, ammoaux, auxcomponents, false, false, charIdentifier);
+                    Weapon auxWeapon = new()
+                    {
+                        Id = weaponId,
+                        Propietary = identifier,
+                        Name = hashName,
+                        Ammo = ammoaux,
+                        Components = auxcomponents,
+                        Used = false,
+                        Used2 = false,
+                        CharId = charIdentifier
+                    };
+
                     ItemDatabase.UserWeapons.Add(weaponId, auxWeapon);
                     if (targetIsPlayer)
                     {
                         TriggerEvent("syn_weapons:registerWeapon", weaponId);
-                        targetPlayer.TriggerEvent("vorpinventory:receiveWeapon", weaponId, ItemDatabase.UserWeapons[weaponId].getPropietary(),
-                            ItemDatabase.UserWeapons[weaponId].getName(), ItemDatabase.UserWeapons[weaponId].getAllAmmo(), ItemDatabase.UserWeapons[weaponId].getAllComponents());
+                        targetPlayer.TriggerEvent("vorpinventory:receiveWeapon", weaponId, ItemDatabase.UserWeapons[weaponId].Propietary,
+                            ItemDatabase.UserWeapons[weaponId].Name, ItemDatabase.UserWeapons[weaponId].Ammo, ItemDatabase.UserWeapons[weaponId].Components);
                     }
                 }));
             }
@@ -1056,7 +1099,7 @@ namespace VORP.Inventory.Server.Scripts
 
                 if (Configuration.INVENTORY_MAX_WEAPONS != 0)
                 {
-                    int totalcount = getUserTotalCountWeapons(identifier, charIdentifier);
+                    int totalcount = GetUserTotalCountWeapons(identifier, charIdentifier);
                     totalcount += 1;
                     if (totalcount > Configuration.INVENTORY_MAX_WEAPONS)
                     {
@@ -1067,14 +1110,14 @@ namespace VORP.Inventory.Server.Scripts
 
                 if (ItemDatabase.UserWeapons.ContainsKey(weapId))
                 {
-                    ItemDatabase.UserWeapons[weapId].setPropietary(identifier);
-                    ItemDatabase.UserWeapons[weapId].setCharId(charIdentifier);
+                    ItemDatabase.UserWeapons[weapId].Propietary = identifier;
+                    ItemDatabase.UserWeapons[weapId].CharId = charIdentifier;
                     Exports["ghmattimysql"]
                         .execute(
                             $"UPDATE loadout SET identifier = ?, charidentifier = ? WHERE id=?",
-                            new object[] { ItemDatabase.UserWeapons[weapId].getPropietary(), charIdentifier, weapId });
-                    player.TriggerEvent("vorpinventory:receiveWeapon", weapId, ItemDatabase.UserWeapons[weapId].getPropietary(),
-                        ItemDatabase.UserWeapons[weapId].getName(), ItemDatabase.UserWeapons[weapId].getAllAmmo(), ItemDatabase.UserWeapons[weapId].getAllComponents());
+                            new object[] { ItemDatabase.UserWeapons[weapId].Propietary, charIdentifier, weapId });
+                    player.TriggerEvent("vorpinventory:receiveWeapon", weapId, ItemDatabase.UserWeapons[weapId].Propietary,
+                        ItemDatabase.UserWeapons[weapId].Name, ItemDatabase.UserWeapons[weapId].Ammo, ItemDatabase.UserWeapons[weapId].Components);
                     if (targetIsPlayer && ptarget != null)
                     {
                         ptarget.TriggerEvent("vorpCoreClient:subWeapon", weapId);
@@ -1109,10 +1152,10 @@ namespace VORP.Inventory.Server.Scripts
                 string identifier = "steam:" + player.Identifiers["steam"];
                 if (ItemDatabase.UserWeapons.ContainsKey(weapId))
                 {
-                    ItemDatabase.UserWeapons[weapId].setPropietary("");
+                    ItemDatabase.UserWeapons[weapId].Propietary = "";
                     Exports["ghmattimysql"]
                         .execute(
-                            $"UPDATE loadout SET identifier = '{ItemDatabase.UserWeapons[weapId].getPropietary()}' , charidentifier = '{charIdentifier}' WHERE id=?",
+                            $"UPDATE loadout SET identifier = '{ItemDatabase.UserWeapons[weapId].Propietary}' , charidentifier = '{charIdentifier}' WHERE id=?",
                             new[] { weapId });
                 }
                 player.TriggerEvent("vorpCoreClient:subWeapon", weapId);
@@ -1128,23 +1171,23 @@ namespace VORP.Inventory.Server.Scripts
         {
             int t_count = 0;
 
-            Dictionary<string, ItemClass> userInventory = ItemDatabase.GetInventory(identifier);
+            Dictionary<string, Item> userInventory = ItemDatabase.GetInventory(identifier);
             if (userInventory == null) return 0;
 
-            foreach (ItemClass item in userInventory.Values)
+            foreach (Item item in userInventory.Values)
             {
-                t_count += item.getCount();
+                t_count += item.Count;
             }
 
             return t_count;
         }
 
-        public static int getUserTotalCountWeapons(string identifier, int charId)
+        public static int GetUserTotalCountWeapons(string identifier, int charId)
         {
             int t_count = 0;
             foreach (var weapon in ItemDatabase.UserWeapons.Values)
             {
-                if (weapon.getPropietary().Contains(identifier) && weapon.getCharId() == charId)
+                if (weapon.Propietary.Contains(identifier) && weapon.CharId == charId)
                 {
                     t_count += 1;
                 }

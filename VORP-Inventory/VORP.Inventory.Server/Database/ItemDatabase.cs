@@ -1,10 +1,9 @@
-﻿using CitizenFX.Core;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
-using VORP.Inventory.Server.Models;
 using VORP.Inventory.Server.Scripts;
+using VORP.Inventory.Shared.Models;
 
 namespace VORP.Inventory.Server.Database
 {
@@ -24,10 +23,10 @@ namespace VORP.Inventory.Server.Database
             set { _items = value; }
         }
         // List of itemclass with the name of its owner to be able to do the whole theme of adding and removing when it is stolen and others
-        public static Dictionary<string, Dictionary<string, ItemClass>> UserInventory = new Dictionary<string, Dictionary<string, ItemClass>>();
+        public static Dictionary<string, Dictionary<string, Item>> UserInventory = new Dictionary<string, Dictionary<string, Item>>();
 
-        public static Dictionary<int, WeaponClass> UserWeapons = new Dictionary<int, WeaponClass>();
-        public static Dictionary<string, Items> ServerItems = new Dictionary<string, Items>();
+        public static Dictionary<int, Weapon> UserWeapons = new Dictionary<int, Weapon>();
+        public static Dictionary<string, Item> ServerItems = new Dictionary<string, Item>();
 
         public void Init()
         {
@@ -36,21 +35,21 @@ namespace VORP.Inventory.Server.Database
             SetupLoadouts();
         }
 
-        public static Dictionary<string, ItemClass> GetInventory(string identifier)
+        public static Dictionary<string, Item> GetInventory(string identifier)
         {
             if (!UserInventory.ContainsKey(identifier)) return null;
             return UserInventory[identifier];
         }
 
-        public static Items GetItem(string itemName)
+        public static Item GetItem(string itemName)
         {
             if (!ServerItems.ContainsKey(itemName)) return null;
             return ServerItems[itemName];
         }
 
-        public static ItemClass GetUserItem(string identifier, string itemName)
+        public static Item GetUserItem(string identifier, string itemName)
         {
-            Dictionary<string, ItemClass> userItems = GetInventory(identifier);
+            Dictionary<string, Item> userItems = GetInventory(identifier);
             if (userItems == null) return null;
             if (!userItems.ContainsKey(itemName)) return null;
             return userItems[itemName];
@@ -79,7 +78,15 @@ namespace VORP.Inventory.Server.Database
                         items = result;
                         foreach (dynamic item in items)
                         {
-                            ServerItems.Add(item.item.ToString(), new Items(item.item, item.label, int.Parse(item.limit.ToString()), item.can_remove, item.type, item.usable));
+                            ServerItems.Add(item.item.ToString(), new Item
+                            {
+                                Name = item.item,
+                                Label = item.label,
+                                Limit = int.Parse(item.limit.ToString()),
+                                CanRemove = item.can_remove,
+                                Type = item.type,
+                                Usable = item.usable
+                            });
                         }
                     }
 
@@ -97,36 +104,39 @@ namespace VORP.Inventory.Server.Database
             Logger.Trace($"Setting up Loadouts");
             Exports["ghmattimysql"].execute("SELECT * FROM loadout;", new object[] { }, new Action<dynamic>(async loadout =>
             {
-                await BaseScript.Delay(0);
-                if (loadout == null)
-                {
-                    Logger.Warn($"No loadouts returned from the database");
-                    return;
-                }
+            await BaseScript.Delay(0);
+            if (loadout == null)
+            {
+                Logger.Warn($"No loadouts returned from the database");
+                return;
+            }
 
-                if (loadout.Count != 0)
-                {
-                    WeaponClass wp;
+            if (loadout.Count != 0)
+            {
+                Weapon wp;
                     foreach (var row in loadout)
                     {
                         try
                         {
-                            JObject ammo = JsonConvert.DeserializeObject(row.ammo.ToString());
-                            JArray comp = JsonConvert.DeserializeObject(row.components.ToString());
+                            string ammo = row.ammo.ToString();
+                            Dictionary<string, int> amunition = new();
+                            string components = row.components.ToString();
+                            List<string> lstComponents = new();
+
+                            if (!string.IsNullOrEmpty(ammo))
+                            {
+                                amunition = JsonConvert.DeserializeObject<Dictionary<string, int>>(row.ammo.ToString());
+                            }
+
+                            if (!string.IsNullOrEmpty(components))
+                            {
+                                lstComponents = JsonConvert.DeserializeObject<List<string>>(row.components.ToString());
+                            }
+
                             int charId = -1;
                             if (row.charidentifier != null)
                             {
                                 charId = row.charidentifier;
-                            }
-                            Dictionary<string, int> amunition = new Dictionary<string, int>();
-                            List<string> components = new List<string>();
-                            foreach (JProperty ammos in ammo.Properties())
-                            {
-                                amunition.Add(ammos.Name, int.Parse(ammos.Value.ToString()));
-                            }
-                            foreach (JToken x in comp)
-                            {
-                                components.Add(x.ToString());
                             }
 
                             bool auused = false;
@@ -134,13 +144,26 @@ namespace VORP.Inventory.Server.Database
                             {
                                 auused = true;
                             }
+
                             bool auused2 = false;
                             if (row.used2 == 1)
                             {
                                 auused2 = true;
                             }
-                            wp = new WeaponClass(int.Parse(row.id.ToString()), row.identifier.ToString(), row.name.ToString(), amunition, components, auused, auused2, charId);
-                            UserWeapons[wp.getId()] = wp;
+
+                            wp = new Weapon
+                            {
+                                Id = int.Parse(row.id.ToString()),
+                                Propietary = row.identifier.ToString(),
+                                Name = row.name.ToString(),
+                                Ammo = amunition,
+                                Components = lstComponents,
+                                Used = auused,
+                                Used2 = auused2,
+                                CharId = charId
+                            };
+
+                            UserWeapons[wp.Id] = wp;
                         }
                         catch (Exception ex)
                         {
@@ -148,6 +171,7 @@ namespace VORP.Inventory.Server.Database
                         }
                     }
                 }
+
                 Logger.Trace($"Loadouts setup completed; found {UserWeapons.Count} loadouts.");
             }));
         }
